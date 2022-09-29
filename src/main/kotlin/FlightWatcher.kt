@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
+val bannedPassengers = setOf("Nogartse")
 fun main() {
     runBlocking {
         println("Getting the latest flight info...")
@@ -38,12 +39,15 @@ fun main() {
 suspend fun watchFlight(initialFlight: FlightStatus) {
     val passengerName = initialFlight.passengerName
     val currentFlight: Flow<FlightStatus> = flow {
+        require(passengerName !in bannedPassengers) {
+            "Cannot track $passengerName's flight. They are banned from the airport"
+        }
         var flight = initialFlight
         while (flight.departureTimeInMinutes >= 0 &&
             !flight.isFlightCanceled
         ) {
             emit(flight)
-            delay(1000)
+            delay(200)
             flight = flight.copy(
                 departureTimeInMinutes =
                 flight.departureTimeInMinutes - 1
@@ -51,6 +55,10 @@ suspend fun watchFlight(initialFlight: FlightStatus) {
         }
     }
     currentFlight
+        .catch { throwable ->
+            throwable.printStackTrace()
+            System.err.println("Nogartse is banned")
+        }
         .map { flight ->
             when (flight.boardingStatus) {
                 FlightCanceled -> "Your flight was canceled"
