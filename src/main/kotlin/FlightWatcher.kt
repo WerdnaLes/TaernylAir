@@ -1,4 +1,6 @@
 import BoardingState.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -79,4 +81,24 @@ suspend fun fetchFlights(
         "Satyricon",
         "Polarcubis"
     )
-) = passengerNames.map { fetchFlight(it) }
+): List<FlightStatus> = coroutineScope {
+    val passengerNamesChannel = Channel<String>()
+
+    launch {
+        passengerNames.forEach {
+            passengerNamesChannel.send(it)
+        }
+    }
+
+    launch {
+        fetchFlightStatuses(passengerNamesChannel)
+    }
+
+    emptyList()
+}
+
+suspend fun fetchFlightStatuses(fetchChannel: Channel<String>) {
+    val passengerName = fetchChannel.receive()
+    val flight = fetchFlight(passengerName)
+    println("Fetched flight: $flight")
+}
