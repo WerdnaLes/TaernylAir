@@ -1,12 +1,15 @@
+
 import BoardingState.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.channels.toList
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 val bannedPassengers = setOf("Nogartse")
+
+
 fun main() {
     runBlocking {
         println("Getting the latest flight info...")
@@ -79,26 +82,47 @@ suspend fun watchFlight(initialFlight: FlightStatus) {
 suspend fun fetchFlights(
     passengerNames: List<String> = listOf(
         "Satyricon",
-        "Polarcubis"
-    )
+        "Polarcubis",
+        "Estragon",
+        "Taernyl",
+    ),
+    numberOfWorkers: Int = 2
 ): List<FlightStatus> = coroutineScope {
     val passengerNamesChannel = Channel<String>()
+    val fetchedFlightsChannel = Channel<FlightStatus>()
 
     launch {
         passengerNames.forEach {
             passengerNamesChannel.send(it)
+            log("sent $it")
         }
+        passengerNamesChannel.close()
     }
 
     launch {
-        fetchFlightStatuses(passengerNamesChannel)
+        (1..numberOfWorkers).map {
+            launch {
+                log("fetched flight BEFORE")
+                fetchFlightStatuses(
+                    fetchChannel = passengerNamesChannel,
+                    resultChannel = fetchedFlightsChannel
+                )
+                log("fetched flight AFTER")
+            }
+        }.joinAll()
+        fetchedFlightsChannel.close()
     }
 
-    emptyList()
+    fetchedFlightsChannel.toList()
 }
 
-suspend fun fetchFlightStatuses(fetchChannel: Channel<String>) {
-    val passengerName = fetchChannel.receive()
-    val flight = fetchFlight(passengerName)
-    println("Fetched flight: $flight")
+suspend fun fetchFlightStatuses(
+    fetchChannel: ReceiveChannel<String>,
+    resultChannel: SendChannel<FlightStatus>
+) {
+    for (passengerName in fetchChannel) {
+        val flight = fetchFlight(passengerName)
+        log("Fetched flight: $flight")
+        resultChannel.send(flight)
+    }
 }
